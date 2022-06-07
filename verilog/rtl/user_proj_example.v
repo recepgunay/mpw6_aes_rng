@@ -52,8 +52,8 @@ module user_proj_example #(
     input [3:0] wbs_sel_i,
     input [31:0] wbs_dat_i,
     input [31:0] wbs_adr_i,
-    output wbs_ack_o,
-    output [31:0] wbs_dat_o,
+    output reg wbs_ack_o,
+    output reg [31:0] wbs_dat_o,
 
     // Logic Analyzer Signals
     input  [127:0] la_data_in,
@@ -68,98 +68,262 @@ module user_proj_example #(
     // IRQ
     output [2:0] irq
 );
+
+localparam [31:0] X_INIT = 32'hDE78D681;
+localparam [31:0] Y_INIT = 32'hFEEE4640;
+localparam [31:0] Z_INIT = 32'hFE8E511B;
+
     wire clk;
     wire rst;
 
-    wire [`MPRJ_IO_PADS-1:0] io_in;
-    wire [`MPRJ_IO_PADS-1:0] io_out;
-    wire [`MPRJ_IO_PADS-1:0] io_oeb;
+	wire [31:0]x;
+	wire [31:0]y;
+	wire [31:0]z;
+	
+	reg [31:0]x_init, x_data;
+	reg [31:0]y_init, y_data;
+	reg [31:0]z_init, z_data;
+	
+	reg [23:0]set_scroll_num;
+	reg [3:0]rng_en;
+	reg smp_en;
+  
+  
+  wire [31:0] aes_dout;
+  wire [31:0] aes_din;
+  wire aes_cs;
+  wire aes_we;
+  reg  crypto_rng_en;
 
-    wire [31:0] rdata; 
-    wire [31:0] wdata;
-    wire [BITS-1:0] count;
+  assign aes_cs  = wbs_stb_i && wbs_cyc_i && ((wbs_adr_i[11:8] == 4'h0) || (wbs_adr_i[11:8] == 4'h9));
+  assign aes_we  = wbs_stb_i && wbs_cyc_i && wbs_we_i && ((wbs_adr_i[11:8] == 4'h0) || (wbs_adr_i[11:8] == 4'h9));
+  assign aes_din = (wbs_adr_i[11:8] == 4'h0) ? wbs_dat_i :
+                   (wbs_adr_i[11:8] == 4'h9) ? x_data : 32'h0;
 
-    wire valid;
-    wire [3:0] wstrb;
-    wire [31:0] la_write;
 
-    // WB MI A
-    assign valid = wbs_cyc_i && wbs_stb_i; 
-    assign wstrb = wbs_sel_i & {4{wbs_we_i}};
-    assign wbs_dat_o = rdata;
-    assign wdata = wbs_dat_i;
+    //WRITE REGS WITH WISHBOND
+	always @(posedge wb_clk_i) begin 
+		if (wb_rst_i) begin
+			x_init <= X_INIT;
+			y_init <= Y_INIT;
+			z_init <= Z_INIT;
+			set_scroll_num <= {8'h4d, 8'h4c, 8'h4b};
+			rng_en <= 4'h3;
+			smp_en <= 1'b0;
+      crypto_rng_en <= 1'b0;
+		end else if (wbs_stb_i && wbs_cyc_i && wbs_we_i && wbs_adr_i[11:0] == 12'h804)begin
+			x_init <= wbs_dat_i;
+		end else if (wbs_stb_i && wbs_cyc_i && wbs_we_i && wbs_adr_i[11:0] == 12'h808)begin
+			y_init <= wbs_dat_i;
+		end else if (wbs_stb_i && wbs_cyc_i && wbs_we_i && wbs_adr_i[11:0] == 12'h80c)begin
+			z_init <= wbs_dat_i;
+		end else if (wbs_stb_i && wbs_cyc_i && wbs_we_i && wbs_adr_i[11:0] == 12'h810)begin
+			set_scroll_num <= wbs_dat_i[23:0];
+		end else if (wbs_stb_i && wbs_cyc_i && wbs_we_i && wbs_adr_i[11:0] == 12'h814)begin
+			rng_en <= wbs_dat_i[3:0];
+		end else if (wbs_stb_i && wbs_cyc_i && wbs_we_i && wbs_adr_i[11:0] == 12'h818)begin
+			smp_en <= wbs_dat_i[0];
+		end else if (wbs_stb_i && wbs_cyc_i && wbs_we_i && wbs_adr_i[11:0] == 12'h840)begin
+			crypto_rng_en <= wbs_dat_i[0];
+		end else begin
+			smp_en <= 1'b0;
+		end
+	end
+	
+	//READ REGS WITH WISHBOND
+	always @(posedge wb_clk_i) begin 
+		if (wb_rst_i) begin
+			wbs_dat_o <= 32'h0;
+		end else if(wbs_stb_i && wbs_cyc_i && !wbs_we_i) begin
+      if (wbs_adr_i[11:8] == 4'h0) begin
+        wbs_dat_o <= aes_dout;
+      end else begin
+        case(wbs_adr_i[11:0])
+          12'h804	: wbs_dat_o <= x_init;
+          12'h808	: wbs_dat_o <= y_init;
+          12'h80c	: wbs_dat_o <= z_init;
+          12'h810	: wbs_dat_o <= {8'h0, set_scroll_num};
+          12'h814	: wbs_dat_o <= {28'h0, rng_en};
+          12'h818	: wbs_dat_o <= smp_en;
+          12'h81c	: wbs_dat_o <= x_data;
+          12'h820	: wbs_dat_o <= y_data;
+          12'h824	: wbs_dat_o <= z_data;
+          default	: wbs_dat_o <= 32'h0;
+        endcase
+      end
+		end
+	end
+	
+	// ACK WISHBOND
+	always @(posedge wb_clk_i) begin 
+		if (wb_rst_i) begin
+			wbs_ack_o <= 1'b0;
+		end else begin
+			wbs_ack_o <= (wbs_stb_i && wbs_cyc_i);
+		end
+	end
+	
+	// SMP XYZ 
+	always @(posedge wb_clk_i) begin 
+		if (wb_rst_i) begin
+			x_data <= 32'h0;
+			y_data <= 32'h0;
+			z_data <= 32'h0;
+		end else if (smp_en) begin
+		  x_data <= x;
+			y_data <= y;
+			z_data <= z;
+		end
+	end
+
 
     // IO
-    assign io_out = count;
-    assign io_oeb = {(`MPRJ_IO_PADS-1){rst}};
+    assign io_out = crypto_rng_en ? aes_dout : x;
+    assign io_oeb = ~{(`MPRJ_IO_PADS-1){rst}};
 
     // IRQ
     assign irq = 3'b000;	// Unused
 
     // LA
-    assign la_data_out = {{(127-BITS){1'b0}}, count};
-    // Assuming LA probes [63:32] are for controlling the count register  
-    assign la_write = ~la_oenb[63:32] & ~{BITS{valid}};
-    // Assuming LA probes [65:64] are for controlling the count clk & reset  
-    assign clk = (~la_oenb[64]) ? la_data_in[64]: wb_clk_i;
-    assign rst = (~la_oenb[65]) ? la_data_in[65]: wb_rst_i;
+    assign la_data_out = {{32{1'b0}}, z, y, x};
+	
+    // Assuming LA probes [97:96] are for controlling the count clk & reset  
+    assign clk = (~la_oenb[96]) ? la_data_in[96]: wb_clk_i;
+    assign rst = (~la_oenb[97]) ? la_data_in[97]: wb_rst_i;
 
-    counter #(
-        .BITS(BITS)
-    ) counter(
+    rng_chaos_scroll u_rng_chaos_chaos (
         .clk(clk),
-        .reset(rst),
-        .ready(wbs_ack_o),
-        .valid(valid),
-        .rdata(rdata),
-        .wdata(wbs_dat_i),
-        .wstrb(wstrb),
-        .la_write(la_write),
-        .la_input(la_data_in[63:32]),
-        .count(count)
+        .rst(rst),
+        .en(rng_en),
+		.x_init(x_init),
+		.y_init(y_init),
+		.z_init(z_init),
+		.Lx(set_scroll_num[3:0]),
+		.Ux(set_scroll_num[6:4]),
+		.Ly(set_scroll_num[11:8]),
+		.Uy(set_scroll_num[14:12]),
+		.Lz(set_scroll_num[19:16]),
+		.Uz(set_scroll_num[22:20]),
+		.x(x),
+		.y(y),
+		.z(z)
+    );
+    
+    aes aes_inst(
+           // Clock and reset.
+      .clk(clk),
+      .reset_n(~rst),
+
+           // Control.
+      .cs(aes_cs),
+      .we(aes_we),
+
+           // Data ports.
+      .address(wbs_adr_i[7:0]),
+      .write_data(aes_din),
+      .read_data(aes_dout)
     );
 
 endmodule
 
-module counter #(
-    parameter BITS = 32
-)(
-    input clk,
-    input reset,
-    input valid,
-    input [3:0] wstrb,
-    input [BITS-1:0] wdata,
-    input [BITS-1:0] la_write,
-    input [BITS-1:0] la_input,
-    output ready,
-    output [BITS-1:0] rdata,
-    output [BITS-1:0] count
+module rng_chaos_scroll(
+	input clk, 
+	input rst, 
+	input [ 3:0] en, 
+	input [31:0] x_init, 
+	input [31:0] y_init, 
+	input [31:0] z_init,
+	input [ 3:0] Lx,                                                            
+	input [ 2:0] Ux,
+	input [ 3:0] Ly,                                                            
+	input [ 2:0] Uy,	
+	input [ 3:0] Lz,                                                            
+	input [ 2:0] Uz,	
+	output reg [31:0] x, 
+	output reg [31:0] y, 
+	output reg [31:0] z
 );
-    reg ready;
-    reg [BITS-1:0] count;
-    reg [BITS-1:0] rdata;
 
-    always @(posedge clk) begin
-        if (reset) begin
-            count <= 0;
-            ready <= 0;
-        end else begin
-            ready <= 1'b0;
-            if (~|la_write) begin
-                count <= count + 1;
-            end
-            if (valid && !ready) begin
-                ready <= 1'b1;
-                rdata <= count;
-                if (wstrb[0]) count[7:0]   <= wdata[7:0];
-                if (wstrb[1]) count[15:8]  <= wdata[15:8];
-                if (wstrb[2]) count[23:16] <= wdata[23:16];
-                if (wstrb[3]) count[31:24] <= wdata[31:24];
-            end else if (|la_write) begin
-                count <= la_write & la_input;
-            end
-        end
-    end
+// wires                                                                   
+wire [31:0] Fx, xn, xo;                                                       
+wire [31:0] Fy, yn, yo;                                                       
+wire [31:0] Fz, zn, zo, zd, zd1, zd2;                                                                                                           
+
+assign Lx = 4'b1011;                                                      
+assign Ux = 3'b100;
+
+func Fx_func(                                                     
+    .F_i(x),                                                               
+    .U_i(Ux),                                                              
+    .L_i(Lx),                                                              
+    .F_o(Fx)                                                               
+    );                                                                            
+
+assign xo = en[1] ? Fx : x;
+
+func Fy_func(                                                     
+    .F_i(y),                                                               
+    .U_i(Uy),                                                              
+    .L_i(Ly),                                                              
+    .F_o(Fy)                                                               
+    ); 
+	
+assign yo = en[2] ? Fy : y;
+	
+func Fz_func(                                                     
+    .F_i(z),                                                               
+    .U_i(Uz),                                                              
+    .L_i(Lz),                                                              
+    .F_o(Fz)                                                               
+    ); 
+
+assign zo = en[3] ? Fz : z;
+
+assign zd1 = xo+yo+zo;
+assign zd2 = {{4{ zd1[31]}},  zd1[31:4]};                        
+assign zd =   zd1 - zd2;
+
+assign xn = x + {{3{yo[31]}}, yo[31:3]};
+assign yn = y + {{3{zo[31]}}, zo[31:3]};
+assign zn = z - {{3{zd[31]}}, zd[31:3]}; 
+
+always @(posedge clk)                                                    
+begin                                                                      
+	if(rst) begin                                                      
+        x <= x_init;                                                          
+        y <= y_init;                                                         
+        z <= z_init;                                                          
+	end else if (en[0]) begin                                                            
+		x <= xn;                                                                 
+		y <= yn;                                                                 
+		z <= zn;                                                             
+	end	                                                                      
+end
 
 endmodule
+
+module func(
+    input   [31:0] F_i,
+    input   [ 2:0] U_i,
+    input   [ 3:0] L_i,
+    output  [31:0] F_o
+    );   
+ 
+ wire [ 5:0] Xhigh;
+ wire [ 5:0] X26_6n;
+ wire [ 5:0] Se_U;
+ wire [ 5:0] XU;
+ wire [ 5:0] XU_X26;
+ wire [ 5:0] out_6b;
+
+  assign Xhigh  = F_i[31:26] - {L_i[3],L_i,1'b1};
+  assign X26_6n = ~{6{F_i[26]}};
+  assign Se_U   = {U_i[2],U_i[2],U_i,1'b1};
+  assign XU     = F_i[31:26] - Se_U;
+  assign XU_X26 = (XU[5]) ? X26_6n : XU;
+  assign out_6b = (Xhigh[5]) ?  Xhigh : XU_X26;
+  assign F_o = {out_6b, F_i[25:0]};
+
+endmodule
+
 `default_nettype wire
