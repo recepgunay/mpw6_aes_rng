@@ -5,7 +5,9 @@
 | :exclamation: Important Note            |
 |-----------------------------------------|
 
-## Please fill in your project documentation in this README.md file 
+## Please fill in your project documentation in this README.md file
+
+This project is a cryptographically secure random number generator design. AES and chatoic RNG are connected to the processor system via Wishbone bus. Cryto secure RNG mode is turned during runtime.
 
 Refer to [README](docs/source/quickstart.rst) for a quick start of how to use caravel_user_project
 
