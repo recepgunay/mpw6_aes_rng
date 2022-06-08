@@ -34,17 +34,10 @@ set ::env(VERILOG_FILES) "\
 set ::env(DESIGN_IS_CORE) 0
 
 set ::env(CLOCK_PORT) "wb_clk_i"
-set ::env(CLOCK_NET) "rng_chaos_scroll.clk"
-set ::env(CLOCK_PERIOD) "20"
-
-set ::env(FP_SIZING) absolute
-set ::env(DIE_AREA) "0 0 1800 1200"
-set ::env(FP_CORE_UTIL) 18
+set ::env(CLOCK_NET) "clk"
+set ::env(CLOCK_PERIOD) "30"
 
 set ::env(FP_PIN_ORDER_CFG) $script_dir/pin_order.cfg
-
-set ::env(PL_BASIC_PLACEMENT) 0
-set ::env(PL_TARGET_DENSITY) 0.14
 
 # Maximum layer used for routing is metal 4.
 # This is because this macro will be inserted in a top level (user_project_wrapper) 
@@ -79,7 +72,7 @@ set ::env(SYNTH_MAX_FANOUT) 3
 # Floorplanning
 ##################################################################
 set ::env(FP_SIZING) absolute
-set ::env(DIE_AREA) "0 0 2500 2500"
+set ::env(DIE_AREA) "0 0 1800 1600"
 set ::env(FP_CORE_UTIL) 18
 set ::env(DESIGN_IS_CORE) 0
 set ::env(FP_PDN_VPITCH) 100
@@ -95,7 +88,7 @@ set ::env(DECAP_CELL) "\
 # Placement
 ##################################################################
 set ::env(PL_BASIC_PLACEMENT) 0
-set ::env(PL_TARGET_DENSITY) 0.14
+set ::env(PL_TARGET_DENSITY) 0.18
 set ::env(PL_TIME_DRIVEN) 0
 set ::env(PL_ROUTABILITY_DRIVEN) 1
 set ::env(PL_MAX_DISPLACEMENT_X) 600
@@ -108,7 +101,7 @@ set ::env(PL_RESIZER_BUFFER_OUTPUT_PORTS) 1
 set ::env(PL_RESIZER_SETUP_MAX_BUFFER_PERCENT) 30
 set ::env(PL_RESIZER_HOLD_MAX_BUFFER_PERCENT) 70
 set ::env(PL_RESIZER_ALLOW_SETUP_VIOS) 1
-set ::env(PL_RESIZER_HOLD_SLACK_MARGIN) 0.1
+set ::env(PL_RESIZER_HOLD_SLACK_MARGIN) 0.2
 set ::env(PL_RESIZER_MAX_WIRE_LENGTH) 125
 
 ##################################################################
@@ -117,6 +110,13 @@ set ::env(PL_RESIZER_MAX_WIRE_LENGTH) 125
 set ::env(CTS_TARGET_SKEW) 150
 set ::env(CTS_TOLERANCE) 25
 set ::env(CTS_CLK_BUFFER_LIST) "sky130_fd_sc_hd__clkbuf_4 sky130_fd_sc_hd__clkbuf_8"
+set ::env(SYNTH_MIN_BUF_PORT) {sky130_fd_sc_hd__buf_4 A X}
+set ::env(DONT_USE_CELLS) "sky130_fd_sc_hd__buf_1 \
+                           sky130_fd_sc_hd__buf_2 \
+                           sky130_fd_sc_hd__buf_12 \
+						   sky130_fd_sc_hd__clkbuf_1 \
+						   sky130_fd_sc_hd__clkbuf_2 \
+						   [listFromFile $::env(PDK_ROOT)/$::env(PDK)/libs.tech/openlane/$::env(STD_CELL_LIBRARY)/drc_exclude.cells]"
 set ::env(CTS_SINK_CLUSTERING_SIZE) "16"
 set ::env(CLOCK_BUFFER_FANOUT) "6"
 set ::env(CTS_CLK_MAX_WIRE_LENGTH) 300
@@ -134,7 +134,7 @@ set ::env(GLB_RT_MAX_DIODE_INS_ITERS) 15
 set ::env(GLOBAL_ROUTER) fastroute
 set ::env(GLB_RESIZER_TIMING_OPTIMIZATIONS) 1
 set ::env(GLB_RESIZER_ALLOW_SETUP_VIOS) 1
-set ::env(GLB_RESIZER_HOLD_SLACK_MARGIN) 0.1
+set ::env(GLB_RESIZER_HOLD_SLACK_MARGIN) 0.4
 set ::env(GLB_RESIZER_HOLD_MAX_BUFFER_PERCENT) 75
 
 ##################################################################
