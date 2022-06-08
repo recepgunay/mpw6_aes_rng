@@ -13,6 +13,13 @@
 # limitations under the License.
 # SPDX-License-Identifier: Apache-2.0
 
+proc listFromFile {filename} {
+    set f [open $filename r]
+    set data [split [string trim [read $f]]]
+    close $f
+    return $data
+}
+
 set ::env(PDK) "sky130A"
 set ::env(STD_CELL_LIBRARY) "sky130_fd_sc_hd"
 
